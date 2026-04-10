@@ -17,8 +17,7 @@ RR_RATIO = 3
 MAX_TRADES = 1
 
 SYMBOL = "BTC"
-
-COOLDOWN = 20  # seconds between trades
+COOLDOWN = 20
 
 # ==============================
 # WALLET
@@ -38,11 +37,12 @@ def get_price():
         res = requests.post(f"{API_URL}/info", json={"type": "allMids"})
         data = res.json()
         return float(data[SYMBOL])
-    except:
+    except Exception as e:
+        print("Price error:", e)
         return None
 
 # ==============================
-# ENTRY LOGIC (VERY SENSITIVE)
+# ENTRY LOGIC
 # ==============================
 
 last_price = None
@@ -60,13 +60,11 @@ def check_entry(price):
 
     print(f"Change: {round(change, 5)}%")
 
-    # cooldown to prevent spam
     if time.time() - last_trade_time < COOLDOWN:
         return False
 
-    # VERY sensitive for testing
     if change > 0.005:
-        print("📈 Momentum detected (TEST MODE)")
+        print("📈 Momentum detected")
         last_trade_time = time.time()
         return True
 
@@ -102,21 +100,22 @@ def send_order(is_buy, size, price):
 
     message = json.dumps(order)
 
-    signed = account.sign_message(
-        encode_defunct(text=message)
-    )
-
-    payload = {
-        "action": order,
-        "signature": signed.signature.hex(),
-        "address": address
-    }
-
     try:
+        signed = account.sign_message(
+            encode_defunct(text=message)
+        )
+
+        payload = {
+            "action": order,
+            "signature": signed.signature.hex(),
+            "address": address
+        }
+
         res = requests.post(f"{API_URL}/exchange", json=payload)
         print("ORDER RESPONSE:", res.json())
+
     except Exception as e:
-        print("ERROR:", e)
+        print("ORDER ERROR:", e)
 
 # ==============================
 # EXECUTE TRADE
@@ -126,6 +125,7 @@ def execute_trade(balance, price):
     size = calc_size(balance, price)
 
     if size <= 0:
+        print("Invalid size")
         return None
 
     sl = price * 0.98
@@ -173,6 +173,15 @@ def manage_trade(trade, price, balance):
 def run():
     balance = 150
     trades = []
+
+    # 🔥 FORCE TRADE ON START
+    print("⚠️ FORCING TEST TRADE...")
+
+    price = get_price()
+    if price:
+        trade = execute_trade(balance, price)
+        if trade:
+            trades.append(trade)
 
     while True:
         price = get_price()
