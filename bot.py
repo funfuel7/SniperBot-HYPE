@@ -14,12 +14,12 @@ PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 
 RISK_PER_TRADE = 0.02
 RR_RATIO = 3
-MAX_TRADES = 1   # keep 1 for safety
+MAX_TRADES = 1
 
 SYMBOL = "BTC"
 
 # ==============================
-# WALLET SETUP
+# WALLET
 # ==============================
 
 account = Account.from_key(PRIVATE_KEY)
@@ -40,7 +40,7 @@ def get_price():
         return None
 
 # ==============================
-# ENTRY LOGIC
+# ENTRY LOGIC (UPDATED)
 # ==============================
 
 last_price = None
@@ -55,8 +55,11 @@ def check_entry(price):
     change = (price - last_price) / last_price * 100
     last_price = price
 
-    # simple breakout
-    if change > 0.3:
+    print(f"Change: {round(change, 4)}%")
+
+    # LOWERED threshold for more trades
+    if change > 0.05:
+        print("📈 Momentum detected")
         return True
 
     return False
@@ -83,8 +86,8 @@ def send_order(is_buy, size, price):
                 "coin": SYMBOL,
                 "isBuy": is_buy,
                 "sz": size,
-                "limitPx": price,
-                "orderType": {"limit": {"tif": "Ioc"}}  # instant execution
+                "limitPx": round(price, 2),
+                "orderType": {"limit": {"tif": "Ioc"}}
             }
         ]
     }
@@ -150,7 +153,7 @@ def manage_trade(trade, price, balance):
         send_order(False, trade["size"], price)
         return "loss"
 
-    # move SL to breakeven
+    # breakeven
     if price > trade["entry"] * 1.02:
         trade["sl"] = trade["entry"]
 
@@ -161,7 +164,7 @@ def manage_trade(trade, price, balance):
 # ==============================
 
 def run():
-    balance = 200  # start small
+    balance = 150  # safer based on your deposit
     trades = []
 
     while True:
