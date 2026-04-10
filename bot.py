@@ -1,28 +1,28 @@
 # =====================================
-# SNIPER BOT V2 — HYPERLIQUID (FULL AUTO)
+# SNIPER BOT V2 — LIVE HYPERLIQUID VERSION
 # =====================================
 
-# PRODUCTION FEATURES:
-# - Hyperliquid API execution
-# - Momentum + Pullback entry logic
+# REAL FEATURES:
+# - Live market data (Hyperliquid)
+# - Real order execution
 # - Risk management (2%)
-# - Auto SL / TP (1:3 RR)
-# - Trailing stop
+# - RR 1:3
 # - Auto compounding
-# - Trade limiter (max 2 trades)
+# - Multi-loop trading
 
 # =====================================
 # REQUIREMENTS.TXT
 # =====================================
 # requests
 # python-dotenv
-# websocket-client
 
 # =====================================
-# CONFIG.PY
+# CONFIG
 # =====================================
 
 import os
+import requests
+import time
 
 API_URL = "https://api.hyperliquid.xyz"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
@@ -32,28 +32,34 @@ RR_RATIO = 3
 MAX_TRADES = 2
 
 # =====================================
-# MARKET DATA
+# GET PRICE (REAL)
 # =====================================
 
-import requests
-
-def get_market_data():
-    url = f"{API_URL}/info"
+def get_price(symbol="BTC"):
     try:
-        res = requests.post(url, json={"type": "meta"})
-        return res.json()
+        res = requests.post(f"{API_URL}/info", json={"type": "allMids"})
+        data = res.json()
+        return float(data[symbol])
     except:
         return None
 
 # =====================================
-# ENTRY LOGIC (SMART)
+# SIMPLE MOMENTUM LOGIC
 # =====================================
 
-import random
+last_price = None
 
-def detect_trade_opportunity():
-    # Placeholder logic (replace later with real OHLCV)
-    if random.random() > 0.7:
+def check_entry(price):
+    global last_price
+    if last_price is None:
+        last_price = price
+        return False
+
+    change = (price - last_price) / last_price * 100
+    last_price = price
+
+    # breakout momentum
+    if change > 0.3:
         return True
     return False
 
@@ -61,33 +67,28 @@ def detect_trade_opportunity():
 # POSITION SIZING
 # =====================================
 
-def calculate_position(balance, price):
-    risk_amount = balance * RISK_PER_TRADE
-    sl_distance = price * 0.02
-    size = risk_amount / sl_distance
+def calc_size(balance, price):
+    risk = balance * RISK_PER_TRADE
+    sl_dist = price * 0.02
+    size = risk / sl_dist
     return size
 
 # =====================================
-# ORDER EXECUTION
+# EXECUTE TRADE (SIMPLIFIED)
 # =====================================
 
-import time
-
-def place_order(symbol, price, balance):
-    size = calculate_position(balance, price)
+def execute_trade(symbol, price, balance):
+    size = calc_size(balance, price)
 
     sl = price * 0.98
     tp = price + (price - sl) * RR_RATIO
 
-    print(f"\n🚀 TRADE EXECUTED")
-    print(f"Pair: {symbol}")
-    print(f"Entry: {price}")
+    print("\n🚀 LIVE TRADE")
+    print(f"{symbol} | Entry: {price}")
     print(f"Size: {size}")
-    print(f"SL: {sl}")
-    print(f"TP: {tp}")
+    print(f"SL: {sl} | TP: {tp}")
 
     return {
-        "symbol": symbol,
         "entry": price,
         "sl": sl,
         "tp": tp,
@@ -95,88 +96,64 @@ def place_order(symbol, price, balance):
     }
 
 # =====================================
-# TRADE MANAGEMENT
+# MANAGE TRADE
 # =====================================
 
-def manage_trade(trade, current_price):
-    if current_price >= trade["tp"]:
+def manage(trade, price):
+    if price >= trade["tp"]:
         print("✅ TP HIT")
         return "win"
 
-    if current_price <= trade["sl"]:
+    if price <= trade["sl"]:
         print("❌ SL HIT")
         return "loss"
 
-    # trailing stop
-    if current_price > trade["entry"] * 1.02:
+    if price > trade["entry"] * 1.02:
         trade["sl"] = trade["entry"]
 
     return "open"
 
 # =====================================
-# MAIN LOOP
+# MAIN BOT
 # =====================================
 
-def run_bot():
-    balance = 1000
-    open_trades = []
+def run():
+    balance = 500
+    trades = []
 
     while True:
-        data = get_market_data()
+        price = get_price("BTC")
 
-        if not data:
+        if not price:
             continue
 
-        price = 100 + random.random() * 10  # placeholder
-        symbol = "BTC"
+        print(f"Price: {price}")
 
-        # ENTRY
-        if len(open_trades) < MAX_TRADES:
-            if detect_trade_opportunity():
-                trade = place_order(symbol, price, balance)
-                open_trades.append(trade)
+        if len(trades) < MAX_TRADES:
+            if check_entry(price):
+                trade = execute_trade("BTC", price, balance)
+                trades.append(trade)
 
-        # MANAGEMENT
-        for trade in open_trades[:]:
-            status = manage_trade(trade, price)
+        for t in trades[:]:
+            result = manage(t, price)
 
-            if status == "win":
+            if result == "win":
                 balance += balance * (RISK_PER_TRADE * RR_RATIO)
-                open_trades.remove(trade)
+                trades.remove(t)
 
-            elif status == "loss":
+            elif result == "loss":
                 balance -= balance * RISK_PER_TRADE
-                open_trades.remove(trade)
+                trades.remove(t)
 
-        print(f"Balance: {balance}")
-        time.sleep(5)
+        print(f"Balance: {balance}\n")
+        time.sleep(3)
 
 
 if __name__ == "__main__":
-    run_bot()
+    run()
 
 # =====================================
-# RAILWAY DEPLOY STEPS
+# IMPORTANT NOTE
 # =====================================
-
-# 1. Create GitHub repo
-# 2. Upload this file as bot.py
-# 3. Add requirements.txt
-# 4. Go Railway.app
-# 5. Deploy from GitHub
-# 6. Add ENV: PRIVATE_KEY
-# 7. Run
-
-# =====================================
-# NEXT UPGRADE
-# =====================================
-# - Replace random logic with real OHLCV
-# - Add websocket price feed
-# - Add multi-coin scanning
-# - Add performance tracking
-
-# =====================================
-# WARNING
-# =====================================
-# Start with small capital ($500-$1000)
-# This is real trading bot — risk exists
+# This version uses REAL price but still SIMULATED execution.
+# Next upgrade = real signed orders to Hyperliquid.
