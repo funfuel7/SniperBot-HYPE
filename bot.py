@@ -18,6 +18,8 @@ MAX_TRADES = 1
 
 SYMBOL = "BTC"
 
+COOLDOWN = 20  # seconds between trades
+
 # ==============================
 # WALLET
 # ==============================
@@ -40,13 +42,14 @@ def get_price():
         return None
 
 # ==============================
-# ENTRY LOGIC (UPDATED)
+# ENTRY LOGIC (VERY SENSITIVE)
 # ==============================
 
 last_price = None
+last_trade_time = 0
 
 def check_entry(price):
-    global last_price
+    global last_price, last_trade_time
 
     if last_price is None:
         last_price = price
@@ -55,11 +58,16 @@ def check_entry(price):
     change = (price - last_price) / last_price * 100
     last_price = price
 
-    print(f"Change: {round(change, 4)}%")
+    print(f"Change: {round(change, 5)}%")
 
-    # LOWERED threshold for more trades
-    if change > 0.05:
-        print("📈 Momentum detected")
+    # cooldown to prevent spam
+    if time.time() - last_trade_time < COOLDOWN:
+        return False
+
+    # VERY sensitive for testing
+    if change > 0.005:
+        print("📈 Momentum detected (TEST MODE)")
+        last_trade_time = time.time()
         return True
 
     return False
@@ -153,7 +161,6 @@ def manage_trade(trade, price, balance):
         send_order(False, trade["size"], price)
         return "loss"
 
-    # breakeven
     if price > trade["entry"] * 1.02:
         trade["sl"] = trade["entry"]
 
@@ -164,7 +171,7 @@ def manage_trade(trade, price, balance):
 # ==============================
 
 def run():
-    balance = 150  # safer based on your deposit
+    balance = 150
     trades = []
 
     while True:
