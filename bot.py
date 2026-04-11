@@ -12,12 +12,7 @@ from eth_account.messages import encode_defunct
 API_URL = "https://api.hyperliquid.xyz"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 
-RISK_PER_TRADE = 0.02
-RR_RATIO = 3
-MAX_TRADES = 1
-
 SYMBOL = "BTC"
-COOLDOWN = 20
 
 # ==============================
 # WALLET
@@ -38,59 +33,32 @@ def get_price():
         data = res.json()
         return float(data[SYMBOL])
     except Exception as e:
-        print("Price error:", e)
+        print("PRICE ERROR:", e)
         return None
 
 # ==============================
-# ENTRY LOGIC
+# SEND ORDER (DEBUG MODE)
 # ==============================
 
-last_price = None
-last_trade_time = 0
+def send_order():
+    price = get_price()
 
-def check_entry(price):
-    global last_price, last_trade_time
+    if not price:
+        print("No price, aborting")
+        return
 
-    if last_price is None:
-        last_price = price
-        return False
+    size = 0.001  # VERY SMALL TEST SIZE
 
-    change = (price - last_price) / last_price * 100
-    last_price = price
+    print("\n⚠️ SENDING TEST ORDER")
+    print(f"Price: {price}")
+    print(f"Size: {size}")
 
-    print(f"Change: {round(change, 5)}%")
-
-    if time.time() - last_trade_time < COOLDOWN:
-        return False
-
-    if change > 0.005:
-        print("📈 Momentum detected")
-        last_trade_time = time.time()
-        return True
-
-    return False
-
-# ==============================
-# POSITION SIZE
-# ==============================
-
-def calc_size(balance, price):
-    risk = balance * RISK_PER_TRADE
-    sl_distance = price * 0.02
-    size = risk / sl_distance
-    return round(size, 4)
-
-# ==============================
-# SEND ORDER
-# ==============================
-
-def send_order(is_buy, size, price):
     order = {
         "type": "order",
         "orders": [
             {
                 "coin": SYMBOL,
-                "isBuy": is_buy,
+                "isBuy": True,
                 "sz": size,
                 "limitPx": round(price, 2),
                 "orderType": {"limit": {"tif": "Ioc"}}
@@ -111,108 +79,31 @@ def send_order(is_buy, size, price):
             "address": address
         }
 
+        print("\n📤 PAYLOAD:")
+        print(payload)
+
         res = requests.post(f"{API_URL}/exchange", json=payload)
-        print("ORDER RESPONSE:", res.json())
+
+        print("\n📥 RAW RESPONSE:")
+        print(res.text)
 
     except Exception as e:
-        print("ORDER ERROR:", e)
+        print("❌ ORDER ERROR:", e)
 
 # ==============================
-# EXECUTE TRADE
-# ==============================
-
-def execute_trade(balance, price):
-    size = calc_size(balance, price)
-
-    if size <= 0:
-        print("Invalid size")
-        return None
-
-    sl = price * 0.98
-    tp = price + (price - sl) * RR_RATIO
-
-    print("\n🚀 TRADE OPENED")
-    print(f"Entry: {price}")
-    print(f"Size: {size}")
-    print(f"SL: {sl}")
-    print(f"TP: {tp}")
-
-    send_order(True, size, price)
-
-    return {
-        "entry": price,
-        "sl": sl,
-        "tp": tp,
-        "size": size
-    }
-
-# ==============================
-# MANAGE TRADE
-# ==============================
-
-def manage_trade(trade, price, balance):
-    if price >= trade["tp"]:
-        print("✅ TP HIT")
-        send_order(False, trade["size"], price)
-        return "win"
-
-    if price <= trade["sl"]:
-        print("❌ SL HIT")
-        send_order(False, trade["size"], price)
-        return "loss"
-
-    if price > trade["entry"] * 1.02:
-        trade["sl"] = trade["entry"]
-
-    return "open"
-
-# ==============================
-# MAIN LOOP
+# MAIN
 # ==============================
 
 def run():
-    balance = 150
-    trades = []
+    print("🚀 BOT STARTED")
 
-    # 🔥 FORCE TRADE ON START
-    print("⚠️ FORCING TEST TRADE...")
+    # FORCE ONE ORDER
+    send_order()
 
-    price = get_price()
-    if price:
-        trade = execute_trade(balance, price)
-        if trade:
-            trades.append(trade)
+    print("\n⏳ Waiting... (bot idle after test)")
 
     while True:
-        price = get_price()
-
-        if not price:
-            continue
-
-        print(f"Price: {price}")
-
-        # ENTRY
-        if len(trades) < MAX_TRADES:
-            if check_entry(price):
-                trade = execute_trade(balance, price)
-                if trade:
-                    trades.append(trade)
-
-        # MANAGEMENT
-        for t in trades[:]:
-            result = manage_trade(t, price, balance)
-
-            if result == "win":
-                balance += balance * (RISK_PER_TRADE * RR_RATIO)
-                trades.remove(t)
-
-            elif result == "loss":
-                balance -= balance * RISK_PER_TRADE
-                trades.remove(t)
-
-        print(f"Balance: {balance}\n")
-
-        time.sleep(3)
+        time.sleep(30)
 
 
 if __name__ == "__main__":
