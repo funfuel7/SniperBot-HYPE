@@ -1,27 +1,15 @@
 import os
 import time
-import json
 import requests
-from eth_account import Account
-from eth_account.messages import encode_defunct
+
+API_URL = "https://api.hyperliquid.xyz"
 
 # ==============================
 # CONFIG
 # ==============================
 
-API_URL = "https://api.hyperliquid.xyz"
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
-
 SYMBOL = "BTC"
-
-# ==============================
-# WALLET
-# ==============================
-
-account = Account.from_key(PRIVATE_KEY)
-address = account.address
-
-print("Using wallet:", address)
+SIZE = 0.001  # test size
 
 # ==============================
 # GET PRICE
@@ -37,58 +25,41 @@ def get_price():
         return None
 
 # ==============================
-# SEND ORDER (DEBUG MODE)
+# CORRECT ORDER REQUEST
 # ==============================
 
 def send_order():
     price = get_price()
 
     if not price:
-        print("No price, aborting")
+        print("No price")
         return
 
-    size = 0.001  # VERY SMALL TEST SIZE
+    print("\n🚀 TEST ORDER START")
+    print("Price:", price)
 
-    print("\n⚠️ SENDING TEST ORDER")
-    print(f"Price: {price}")
-    print(f"Size: {size}")
-
-    order = {
+    # ⚠️ Correct format for Hyperliquid test
+    payload = {
         "type": "order",
         "orders": [
             {
                 "coin": SYMBOL,
                 "isBuy": True,
-                "sz": size,
-                "limitPx": round(price, 2),
+                "sz": SIZE,
+                "limitPx": price,
                 "orderType": {"limit": {"tif": "Ioc"}}
             }
         ]
     }
 
-    message = json.dumps(order)
-
     try:
-        signed = account.sign_message(
-            encode_defunct(text=message)
-        )
-
-        payload = {
-            "action": order,
-            "signature": signed.signature.hex(),
-            "address": address
-        }
-
-        print("\n📤 PAYLOAD:")
-        print(payload)
-
         res = requests.post(f"{API_URL}/exchange", json=payload)
 
-        print("\n📥 RAW RESPONSE:")
+        print("\n📥 RESPONSE:")
         print(res.text)
 
     except Exception as e:
-        print("❌ ORDER ERROR:", e)
+        print("ORDER ERROR:", e)
 
 # ==============================
 # MAIN
@@ -97,10 +68,7 @@ def send_order():
 def run():
     print("🚀 BOT STARTED")
 
-    # FORCE ONE ORDER
     send_order()
-
-    print("\n⏳ Waiting... (bot idle after test)")
 
     while True:
         time.sleep(30)
