@@ -1,87 +1,77 @@
 import os
 import time
 import requests
-import json
+from web3 import Web3
 from eth_account import Account
-from eth_account.messages import encode_defunct
 
 API_URL = "https://api.hyperliquid.xyz"
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 
-SYMBOL = "BTC"
-SIZE = 0.001
-
-# ==============================
-# WALLET
-# ==============================
+w3 = Web3()
 
 account = Account.from_key(PRIVATE_KEY)
 address = account.address
 
 print("Using wallet:", address)
 
-# ==============================
-# GET NONCE
-# ==============================
-
-def get_nonce():
-    try:
-        res = requests.post(f"{API_URL}/info", json={
-            "type": "clearinghouseState",
-            "user": address
-        })
-        data = res.json()
-        return data["nonce"]
-    except Exception as e:
-        print("Nonce error:", e)
-        return int(time.time() * 1000)
+SYMBOL = "BTC"
+SIZE = 0.001
 
 # ==============================
 # GET PRICE
 # ==============================
 
 def get_price():
-    try:
-        res = requests.post(f"{API_URL}/info", json={"type": "allMids"})
-        data = res.json()
-        return float(data[SYMBOL])
-    except Exception as e:
-        print("Price error:", e)
-        return None
+    res = requests.post(f"{API_URL}/info", json={"type": "allMids"})
+    data = res.json()
+    return float(data[SYMBOL])
 
 # ==============================
-# SIGN ACTION
+# GET NONCE
 # ==============================
 
-def sign_action(action, nonce):
+def get_nonce():
+    return int(time.time() * 1000)
+
+# ==============================
+# SIGN TYPED DATA (CORRECT WAY)
+# ==============================
+
+def sign_order(action, nonce):
     message = {
-        "action": action,
-        "nonce": nonce
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"}
+            ],
+            "Action": [
+                {"name": "action", "type": "string"},
+                {"name": "nonce", "type": "uint256"}
+            ]
+        },
+        "primaryType": "Action",
+        "domain": {"name": "Hyperliquid"},
+        "message": {
+            "action": str(action),
+            "nonce": nonce
+        }
     }
 
-    encoded = json.dumps(message, separators=(',', ':'))
-
     signed = account.sign_message(
-        encode_defunct(text=encoded)
+        Web3.solidity_keccak(['string'], [str(message)])
     )
 
     return signed.signature.hex()
 
 # ==============================
-# SEND ORDER (CORRECT FORMAT)
+# SEND ORDER
 # ==============================
 
 def send_order():
     price = get_price()
     nonce = get_nonce()
 
-    if not price:
-        print("No price")
-        return
-
-    print("\n🚀 SENDING REAL TEST ORDER")
+    print("\n🚀 TEST ORDER")
     print("Price:", price)
-    print("Nonce:", nonce)
 
     action = {
         "type": "order",
@@ -96,7 +86,7 @@ def send_order():
         ]
     }
 
-    signature = sign_action(action, nonce)
+    signature = sign_order(action, nonce)
 
     payload = {
         "action": action,
@@ -105,17 +95,11 @@ def send_order():
         "address": address
     }
 
-    print("\n📤 PAYLOAD:")
-    print(payload)
+    print("\n📤 PAYLOAD:", payload)
 
-    try:
-        res = requests.post(f"{API_URL}/exchange", json=payload)
+    res = requests.post(f"{API_URL}/exchange", json=payload)
 
-        print("\n📥 RESPONSE:")
-        print(res.text)
-
-    except Exception as e:
-        print("Order error:", e)
+    print("\n📥 RESPONSE:", res.text)
 
 # ==============================
 # MAIN
@@ -125,8 +109,6 @@ def run():
     print("🚀 BOT STARTED")
 
     send_order()
-
-    print("\n⏳ Waiting...")
 
     while True:
         time.sleep(30)
